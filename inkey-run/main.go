@@ -23,7 +23,7 @@ func main() {
 			continue
 		}
 		log.Printf("waiting for key")
-		time.Sleep(time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 	}
 
 	log.Printf("done")
