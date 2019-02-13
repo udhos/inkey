@@ -92,3 +92,58 @@ func (i *Inkey) Inkey() (byte, bool) {
 
 	return b, err == nil
 }
+
+func (i *Inkey) Read(buf []byte) (int, error) {
+
+	for {
+		// 1. if data in buffer, return it
+		i.bufMutex.Lock()
+		if i.buf.Len() > 0 {
+			n, err := i.buf.Read(buf)
+			i.bufMutex.Unlock()
+			return n, err
+		}
+		i.bufMutex.Unlock()
+
+		// 2. if error, return it
+		if errBroken := i.getBroken(); errBroken != nil {
+			return 0, errBroken
+		}
+
+		// 3. read more from input stream into buffer
+		i.more <- struct{}{}
+	}
+}
+
+func (i *Inkey) ReadBytes(delim byte) (line []byte, err error) {
+
+	for {
+		// 1. search delim in current buffer
+		i.bufMutex.Lock()
+		buf := i.buf.Bytes()
+		index := bytes.IndexByte(buf, delim)
+		i.bufMutex.Unlock()
+
+		if index >= 0 {
+			// found
+			line = make([]byte, index+1)
+			_, err = i.Read(line)
+			return
+		}
+
+		// 2. if error, return it
+		if errBroken := i.getBroken(); errBroken != nil {
+			if len(buf) > 0 {
+				line = make([]byte, len(buf))
+				_, err = i.Read(line)
+			}
+			if err == nil {
+				err = errBroken
+			}
+			return
+		}
+
+		// 3. read more from input stream into buffer
+		i.more <- struct{}{}
+	}
+}
