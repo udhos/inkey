@@ -23,8 +23,8 @@ func New(r io.Reader) *Inkey {
 	i := &Inkey{
 		reader:   r,
 		more:     make(chan struct{}),
-		bufCopy:  make([]byte, 20),
-		bufLimit: 200,
+		bufCopy:  make([]byte, 100),
+		bufLimit: 1000,
 	}
 	go inputLoop(i)
 	return i
