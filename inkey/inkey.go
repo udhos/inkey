@@ -3,14 +3,14 @@ package inkey
 import (
 	"bytes"
 	"io"
-	"log"
+	//"log"
 	"sync"
-	"time"
+	//"time"
 )
 
 type Inkey struct {
-	reader io.Reader
-	//more        chan struct{}
+	reader      io.Reader
+	more        chan struct{}
 	buf         bytes.Buffer
 	bufMutex    sync.Mutex
 	broken      error
@@ -20,7 +20,7 @@ type Inkey struct {
 func New(r io.Reader) *Inkey {
 	i := &Inkey{
 		reader: r,
-		//more:   make(chan struct{}),
+		more:   make(chan struct{}),
 	}
 	go inputLoop(i)
 	return i
@@ -41,38 +41,38 @@ func (i *Inkey) setBroken(err error) {
 	i.brokenMutex.Unlock()
 }
 
-func full(i *Inkey) bool {
+func (i *Inkey) isBroken() bool {
+	return i.getBroken() != nil
+}
+
+func (i *Inkey) isFull() bool {
 	i.bufMutex.Lock()
 	s := i.buf.Len()
 	i.bufMutex.Unlock()
-	return s > 100
+	return s > 10
 }
 
 func inputLoop(i *Inkey) {
 	for {
-		if i.getBroken() == nil {
+		if !i.isBroken() && !i.isFull() {
 			copy(i)
 		}
-		time.Sleep(time.Second) // ugh
+		<-i.more
 	}
 }
 
 func copy(i *Inkey) {
 
-	buf := make([]byte, 10)
-
-	if full(i) {
-		return
-	}
+	buf := make([]byte, 5)
 
 	rd, errRead := i.reader.Read(buf)
 	i.setBroken(errRead)
-	log.Printf("inputLoop: read=%d broken=%v", rd, i.getBroken())
+	//log.Printf("inputLoop: read=%d broken=%v", rd, i.getBroken())
 
 	if rd > 0 {
 		i.bufMutex.Lock()
-		wr, errWrite := i.buf.Write(buf[:rd])
-		log.Printf("inputLoop: write=%d buf=%d", wr, i.buf.Len())
+		_, errWrite := i.buf.Write(buf[:rd])
+		//log.Printf("inputLoop: write=%d buf=%d", wr, i.buf.Len())
 		i.bufMutex.Unlock()
 		i.setBroken(errWrite)
 	}
@@ -83,7 +83,12 @@ func (i *Inkey) Inkey() (byte, bool) {
 	b, err := i.buf.ReadByte()
 	i.bufMutex.Unlock()
 
-	log.Printf("Inkey: %d byte='%c' error=%v", b, b, err)
+	select {
+	case i.more <- struct{}{}:
+	default:
+	}
+
+	//log.Printf("Inkey: %d byte='%c' error=%v", b, b, err)
 
 	return b, err == nil
 }
