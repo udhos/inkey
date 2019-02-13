@@ -15,12 +15,16 @@ type Inkey struct {
 	bufMutex    sync.Mutex
 	broken      error
 	brokenMutex sync.RWMutex
+	bufCopy     []byte
+	bufLimit    int
 }
 
 func New(r io.Reader) *Inkey {
 	i := &Inkey{
-		reader: r,
-		more:   make(chan struct{}),
+		reader:   r,
+		more:     make(chan struct{}),
+		bufCopy:  make([]byte, 20),
+		bufLimit: 200,
 	}
 	go inputLoop(i)
 	return i
@@ -49,7 +53,7 @@ func (i *Inkey) isFull() bool {
 	i.bufMutex.Lock()
 	s := i.buf.Len()
 	i.bufMutex.Unlock()
-	return s > 10
+	return s > i.bufLimit
 }
 
 func inputLoop(i *Inkey) {
@@ -63,15 +67,13 @@ func inputLoop(i *Inkey) {
 
 func copy(i *Inkey) {
 
-	buf := make([]byte, 5)
-
-	rd, errRead := i.reader.Read(buf)
+	rd, errRead := i.reader.Read(i.bufCopy)
 	i.setBroken(errRead)
 	//log.Printf("inputLoop: read=%d broken=%v", rd, i.getBroken())
 
 	if rd > 0 {
 		i.bufMutex.Lock()
-		_, errWrite := i.buf.Write(buf[:rd])
+		_, errWrite := i.buf.Write(i.bufCopy[:rd])
 		//log.Printf("inputLoop: write=%d buf=%d", wr, i.buf.Len())
 		i.bufMutex.Unlock()
 		i.setBroken(errWrite)
