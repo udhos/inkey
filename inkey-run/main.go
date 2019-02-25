@@ -16,7 +16,7 @@ func main() {
 	for {
 		b, found := input.Inkey()
 		if found {
-			log.Printf("key found: '%c'", b)
+			log.Printf("key found: '%c' value=%d", b, b)
 			if b == 'q' {
 				break
 			}
