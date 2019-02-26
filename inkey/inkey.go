@@ -117,23 +117,48 @@ func (i *Inkey) Read(buf []byte) (int, error) {
 	}
 }
 
+func (i *Inkey) dropBackspaces() {
+	buf := i.buf.Bytes()
+
+	bufClean := make([]byte, 0, cap(buf))
+	for _, b := range buf {
+		switch b {
+		case 8, 127:
+			if len(bufClean) > 0 {
+				bufClean = bufClean[:len(bufClean)-1]
+			}
+		default:
+			bufClean = append(bufClean, b)
+		}
+	}
+	if len(bufClean) < len(buf) {
+		i.buf.Reset()
+		i.buf.Write(bufClean)
+	}
+}
+
 func (i *Inkey) ReadBytes(delim byte) (line []byte, err error) {
 
 	for {
-		// 1. search delim in current buffer
 		i.bufMutex.Lock()
+
+		// 1. remove backspaces from current buffer
+		i.dropBackspaces()
+
+		// 2. search delim in current buffer
 		buf := i.buf.Bytes()
 		index := bytes.IndexByte(buf, delim)
+
 		i.bufMutex.Unlock()
 
 		if index >= 0 {
-			// found
+			// found delim in current buffer
 			line = make([]byte, index+1)
 			_, err = i.Read(line)
 			return
 		}
 
-		// 2. if error, return it
+		// 3. if error, return it
 		if errBroken := i.getBroken(); errBroken != nil {
 			if len(buf) > 0 {
 				line = make([]byte, len(buf))
@@ -145,7 +170,7 @@ func (i *Inkey) ReadBytes(delim byte) (line []byte, err error) {
 			return
 		}
 
-		// 3. read more from input stream into buffer
+		// 4. read more from input stream into buffer
 		i.more <- struct{}{}
 	}
 }
