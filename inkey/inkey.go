@@ -58,7 +58,7 @@ func (i *Inkey) isFull() bool {
 
 func inputLoop(i *Inkey) {
 	for {
-		if !i.isBroken() && !i.isFull() {
+		if !i.isBroken() {
 			copy(i)
 		}
 		<-i.more
@@ -69,14 +69,25 @@ func copy(i *Inkey) {
 
 	rd, errRead := i.reader.Read(i.bufCopy)
 	i.setBroken(errRead)
-	//log.Printf("inputLoop: read=%d broken=%v", rd, i.getBroken())
 
 	if rd > 0 {
-		i.bufMutex.Lock()
-		_, errWrite := i.buf.Write(i.bufCopy[:rd])
-		//log.Printf("inputLoop: write=%d buf=%d", wr, i.buf.Len())
-		i.bufMutex.Unlock()
-		i.setBroken(errWrite)
+		if i.isFull() {
+			// no room to copy, discard anything but backspaces
+			for _, b := range i.bufCopy[:rd] {
+				if b == 8 || b == 127 {
+					i.bufMutex.Lock()
+					errWrite := i.buf.WriteByte(b)
+					i.bufMutex.Unlock()
+					i.setBroken(errWrite)
+				}
+			}
+		} else {
+			// there is room to copy
+			i.bufMutex.Lock()
+			_, errWrite := i.buf.Write(i.bufCopy[:rd])
+			i.bufMutex.Unlock()
+			i.setBroken(errWrite)
+		}
 	}
 }
 
